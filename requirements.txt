@@ -1,0 +1,3 @@
+# Using Indigo128's fork due to YouTube parsing issues in official repo (Nov 2025)
+# See: https://github.com/xenova/chat-downloader/issues/282
+git+https://github.com/Indigo128/chat-downloader.git
