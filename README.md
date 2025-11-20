@@ -28,6 +28,10 @@ sudo apt install speech-dispatcher python3-speechd espeak-ng
 sudo dnf install speech-dispatcher python3-speechd espeak-ng
 ```
 
+### Virtual environment notes
+
+When you create the virtual environment, use --system-site-packages. The reason for this is because the Python speechd bindings aren't readily available on pipy. This will add the speechd bindings and your system level site packages, while still letting you install the other dependencies that distributions won't have.
+
 ## Installation
 
 ### Install from source
