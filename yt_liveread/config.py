@@ -1,5 +1,6 @@
 """Configuration for YouTube Live Chat TTS Reader"""
 
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -45,3 +46,7 @@ class Config:
 
         if self.queue_max_size < 1:
             raise ValueError("Queue max size must be positive")
+
+        if self.cookies_path is not None:
+            if not os.path.isfile(self.cookies_path):
+                raise ValueError(f"Cookie file does not exist: {self.cookies_path}")

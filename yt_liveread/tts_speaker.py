@@ -66,13 +66,18 @@ class TTSSpeaker:
 
         try:
             while not self.shutdown_event.is_set():
-                # Wait if paused
-                self.pause_event.wait()
-
                 try:
                     # Get message from queue with timeout
                     # Timeout allows us to check shutdown_event periodically
                     text = self.message_queue.get(timeout=0.5)
+
+                    # Wait if paused (check right before speaking to avoid race condition)
+                    self.pause_event.wait()
+
+                    # Check shutdown again after potentially waiting on pause
+                    if self.shutdown_event.is_set():
+                        self.message_queue.task_done()
+                        break
 
                     # Print message to console
                     print(f"💬 {text}")
@@ -98,8 +103,8 @@ class TTSSpeaker:
                 try:
                     self.client.cancel()
                     self.client.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Warning: Error closing Speech Dispatcher client: {e}")
             print("TTS speaker thread stopped")
 
     def start(self):
