@@ -71,22 +71,27 @@ class TTSSpeaker:
                     # Timeout allows us to check shutdown_event periodically
                     text = self.message_queue.get(timeout=0.5)
 
-                    # Wait if paused (check right before speaking to avoid race condition)
-                    self.pause_event.wait()
+                    try:
+                        # Wait if paused, checking shutdown periodically to avoid
+                        # blocking indefinitely if shutdown is triggered while paused
+                        while not self.pause_event.wait(timeout=0.5):
+                            if self.shutdown_event.is_set():
+                                break
 
-                    # Check shutdown again after potentially waiting on pause
-                    if self.shutdown_event.is_set():
+                        # Check shutdown again after potentially waiting on pause
+                        if self.shutdown_event.is_set():
+                            break
+
+                        # Print message to console
+                        print(text)
+
+                        # Speak the message
+                        if self.client:
+                            self.client.speak(text)
+
+                    finally:
+                        # Always mark task as done, even if an error occurred
                         self.message_queue.task_done()
-                        break
-
-                    # Print message to console
-                    print(f"💬 {text}")
-
-                    # Speak the message
-                    if self.client:
-                        self.client.speak(text)
-
-                    self.message_queue.task_done()
 
                 except queue.Empty:
                     # No messages, continue loop
@@ -114,6 +119,14 @@ class TTSSpeaker:
 
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
+
+    def cancel(self):
+        """Cancel any currently playing or queued speech"""
+        if self.client:
+            try:
+                self.client.cancel()
+            except Exception:
+                pass  # Ignore errors during cancellation
 
     def join(self, timeout: Optional[float] = None):
         """Wait for the TTS speaker thread to finish"""

@@ -2,8 +2,10 @@
 """YouTube Live Chat TTS Reader - Main Entry Point"""
 
 import argparse
+import functools
 import queue
 import re
+import select
 import signal
 import sys
 import threading
@@ -167,7 +169,7 @@ def main():
 
     # Setup signal handler for Ctrl+C
     signal.signal(
-        signal.SIGINT, lambda sig, frame: signal_handler(sig, frame, shutdown_event)
+        signal.SIGINT, functools.partial(signal_handler, shutdown_event=shutdown_event)
     )
 
     # Create components
@@ -191,31 +193,43 @@ def main():
         print("-" * 50)
         print()
 
-        # Main control loop
+        # Main control loop with non-blocking input
+        # Use select to check if input is available, allowing us to
+        # periodically check shutdown_event (fixes blocking on input)
+        # Note: select() on stdin only works on Unix-like systems (Linux, macOS)
         while not shutdown_event.is_set():
             try:
-                cmd = input().strip().lower()
+                # Wait for input with timeout (0.5s) to check shutdown_event
+                readable, _, _ = select.select([sys.stdin], [], [], 0.5)
 
-                if cmd == "p":
-                    if pause_event.is_set():
-                        pause_event.clear()
-                        print("⏸  PAUSED")
+                if readable:
+                    cmd = sys.stdin.readline()
+                    if not cmd:
+                        # EOF (stdin closed)
+                        break
+
+                    cmd = cmd.strip().lower()
+
+                    if cmd == "p":
+                        if pause_event.is_set():
+                            pause_event.clear()
+                            print("⏸  PAUSED")
+                        else:
+                            pause_event.set()
+                            print("▶  RESUMED")
+
+                    elif cmd == "q":
+                        print("Quitting...")
+                        shutdown_event.set()
+                        break
+
+                    elif cmd == "":
+                        # Allow empty input (just pressing Enter)
+                        continue
+
                     else:
-                        pause_event.set()
-                        print("▶  RESUMED")
-
-                elif cmd == "q":
-                    print("Quitting...")
-                    shutdown_event.set()
-                    break
-
-                elif cmd == "":
-                    # Allow empty input (just pressing Enter)
-                    continue
-
-                else:
-                    print(f"Unknown command: {cmd}")
-                    print("Use 'p' to pause/resume or 'q' to quit")
+                        print(f"Unknown command: {cmd}")
+                        print("Use 'p' to pause/resume or 'q' to quit")
 
             except EOFError:
                 # stdin closed
@@ -228,8 +242,20 @@ def main():
     finally:
         # Wait for threads to finish
         print("Waiting for threads to stop...")
-        chat_reader.join(timeout=2)
-        tts_speaker.join(timeout=2)
+
+        # Cancel any in-progress speech to allow faster shutdown
+        tts_speaker.cancel()
+
+        # Give threads time to finish (increased from 2s to allow cleanup)
+        chat_reader.join(timeout=5)
+        tts_speaker.join(timeout=5)
+
+        # Warn if threads are still alive
+        if chat_reader.thread and chat_reader.thread.is_alive():
+            print("Warning: Chat reader thread did not stop in time")
+        if tts_speaker.thread and tts_speaker.thread.is_alive():
+            print("Warning: TTS speaker thread did not stop in time")
+
         print("Done")
 
 
