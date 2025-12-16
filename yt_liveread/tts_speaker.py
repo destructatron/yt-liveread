@@ -31,6 +31,7 @@ class TTSSpeaker:
         self.shutdown_event = shutdown_event
         self.thread: Optional[threading.Thread] = None
         self.client: Optional[speechd.SSIPClient] = None
+        self.ready_event = threading.Event()  # Set when TTS is ready to receive messages
 
     def _setup_client(self):
         """Initialize and configure Speech Dispatcher client"""
@@ -62,7 +63,11 @@ class TTSSpeaker:
     def _run(self):
         """Main TTS speaker loop"""
         if not self._setup_client():
+            self.ready_event.set()  # Signal ready even on failure so main doesn't block forever
             return
+
+        # Signal that TTS is ready to receive messages
+        self.ready_event.set()
 
         try:
             while not self.shutdown_event.is_set():

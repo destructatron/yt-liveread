@@ -185,6 +185,14 @@ def main():
 
     try:
         tts_speaker.start()
+
+        # Wait for TTS speaker to be ready before starting chat reader
+        # This prevents messages from being queued before TTS can process them
+        print("Initializing TTS...")
+        tts_speaker.ready_event.wait(timeout=10)
+        if not tts_speaker.ready_event.is_set():
+            print("Warning: TTS initialization timed out, starting anyway")
+
         chat_reader.start()
 
         print("\nControls:")
